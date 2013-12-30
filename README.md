@@ -1,2 +1,2 @@
-Jobserver
-=========
+scivm-jobmanager
+================
