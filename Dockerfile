@@ -7,7 +7,7 @@ RUN echo "deb ftp://mirror.hetzner.de/ubuntu/packages precise main restricted un
 RUN locale-gen en_US en_US.UTF-8
 
 # Utilities
-RUN apt-get install -y python-setuptools vim-tiny less curl git unzip subversion python-software-properties make gcc redis-server
+RUN apt-get install -y python-dev python-setuptools vim-tiny less curl git unzip subversion python-software-properties make gcc redis-server
 
 # Supervisord
 RUN apt-get install -y supervisor && mkdir -p /var/log/supervisor
