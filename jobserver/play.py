@@ -67,6 +67,7 @@ def play(job_data, socket):
         data = receive_json(socket)
         if data["type"] == "finished":
             if "traceback" in data:
+                data.pop("traceback")
                 data["exception"] = receive(socket, data.pop("payload_length"))
             else:
                 data["result_pickled"] = receive(socket, data.pop("payload_length"))
