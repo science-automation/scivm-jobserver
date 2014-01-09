@@ -39,12 +39,17 @@ class QueueHandler(object):
                 print cli.get("dummy")
                 print "redis connected"
                 return cli
-            except:
+            except redis.exceptions.RedisError, e:
                 print "redis is offline, trying to connect..."
                 gevent.sleep(5)
     
     def connect(self):
         self.connected.clear()
+        if self.cli:
+            try:
+                self.cli.close()
+            except Exception, e:
+                print "exception at closing redis client", e
         self.cli = self._get_client()
         self.connected.set()
     
@@ -54,7 +59,7 @@ class QueueHandler(object):
                 self.connected.wait()
                 queue, payload = self.cli.blpop("noq.jobs.queued")
                 return payload
-            except:
+            except redis.exceptions.RedisError, e:
                 print "redis is unavailable"
                 self.connect()
     
@@ -65,7 +70,7 @@ class QueueHandler(object):
                 self.cli.lpush("noq.jobs.finished", data)
                 #print "pushed"
                 return
-            except:
+            except redis.exceptions.RedisError, e:
                 print "redis is unavailable"
                 self.connect()
     
@@ -136,6 +141,7 @@ class Worker(object):
         return self.coro
 
     def kill(self):
+        print "killing worker {0}".format(self.id)
         self.coro.kill()
 
     def do(self):
@@ -230,5 +236,6 @@ if __name__ == '__main__':
     except Exception, e:
         print e
     finally:
+        print "shuting down..."
         jserver.kill()
         listener.close()
