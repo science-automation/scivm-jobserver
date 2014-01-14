@@ -18,6 +18,7 @@ RUN apt-get install -y openssh-server && mkdir /var/run/sshd
 # job management
 RUN mkdir -p /opt/apps/scivm/jobserver
 ADD jobserver /opt/apps/scivm/jobserver
+RUN (chmod 755 /opt/apps/scivm/jobserver/start-jobserver)
 
 # supervisor
 ADD supervisord.conf /etc/supervisor/supervisord.conf
