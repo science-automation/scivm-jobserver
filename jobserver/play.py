@@ -31,10 +31,10 @@ def play(job_data, socket):
     
     # -- send setup params
     send(socket, {
-            "ap_version": "",
-            "ap_path": "",
-            "archive_path": "",
-            "hostname": "rekk",
+            "ap_version": "", #FIXME job_data["ap_version"],
+            "ap_path": "", #FIXME
+            "archive_path": "",#FIXME
+            "hostname": job_data["hostname"],
             "type": "setup",
             "fileno": 0, # stdin
     })
