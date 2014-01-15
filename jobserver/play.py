@@ -36,7 +36,7 @@ def play(job_data, socket):
             "archive_path": "",#FIXME
             "hostname": job_data["hostname"],
             "type": "setup",
-            "fileno": 0, # stdin
+            "fileno": 1, # stdout
     })
 
 
