@@ -181,8 +181,6 @@ class JobServer(object):
         self.workers = {}
         self._next_worker_id = 0
 
-        self.sockets = gevent.queue.Queue()
-    
     @property
     def next_worker_id(self):
         try:
