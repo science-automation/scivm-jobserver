@@ -10,18 +10,24 @@ class WorkerGateway(object):
         puts connection objects to a queue 
     """
 
-    def __init__(self, endpoint, new_conn_queue):
+    def __init__(self, endpoint, conn_handler):
         self._address, self._port = endpoint.split(":")
+        try:
+            self._port = int(self._port)
+        except ValueError:
+            raise ValueError("endpoint port is no an integer")
+
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._socket.bind((address, port))
+        self._socket.bind((self._address, self._port))
         self._socket.listen(1)
         self._server = gevent.server.StreamServer(self._socket, self._accept)
-        
+        self._conn_handler = conn_handler
+
     def _accept(self, socket, address):
         socket.settimeout(None)
         conn = WorkerConnection(socket, address)
-        new_conn_queue.put_nowait(conn)
+        self._conn_handler(conn)
 
     def start(self):
         self._server_coro = gevent.spawn(self._server.serve_forever)
@@ -29,6 +35,7 @@ class WorkerGateway(object):
     def stop(self, timeout=None):
         if self._server_coro:
             self._server_coro.kill(timeout=timeout)
+        self._socket.close()
 
 
 class WorkerConnection(object):
