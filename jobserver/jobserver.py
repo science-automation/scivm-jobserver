@@ -12,7 +12,9 @@ import pickle
 import redis
 import zlib
 
-from play import play
+
+from workergateway import WorkerConnection, WorkerGateway
+from worker import WorkerInterface
 
 
 class QueueHandler(object):
@@ -151,15 +153,20 @@ class Worker(object):
             self.cur_job = job_data
             print 'worker {0} got job {1}'.format(self.id, job_data["pk"])
             try:
-                update = play(job_data, self.socket)
+                conn  = WorkerConnection(self.socket, "")
+                worker = WorkerInterface(conn)
+                worker.setup(job_data)
+                updates = worker.assign(job_data)
+                for update in updates:
+                    print update
             except IOError, e:
                 self.q.to_abandoned(job_data) #FIXME restartable?
                 self.jm.deregister_worker(self)
                 self.kill()
                 return 
-            except Exception, e:
-                print e
-                update = {"runtime": 0.0, "exception": "system error? {0}".format(str(e))} 
+            #except Exception, e:
+            #    print e
+            #    update = {"runtime": 0.0, "exception": "system error? {0}".format(str(e))} 
             print 'worker {0} got result of job {1}'.format(self.id, job_data["pk"])
             
             if 'exception' in update:
@@ -168,6 +175,7 @@ class Worker(object):
             update["finished_at"] = time.time()
             update["pk"] = job_data["pk"]
             update["group_id"] = job_data["group_id"]
+            update.pop("type")
             self.q.push(update)
             self.cur_job = None
 
