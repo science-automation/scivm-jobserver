@@ -1,9 +1,31 @@
+import sys
+
 
 class WorkerInterface(object):
     
     def __init__(self, conn):
         self._conn = conn
         self._ap_version = None
+
+        try:
+            message, _ = self._recv_msg()
+            # first incoming message must be an registration message with qdesc
+            assert "type" in message and message["type"] == "registration"
+            assert "qdesc" in message
+        except Exception, e:
+            (_, _, traceback) = sys.exc_info()
+            self._conn.close()
+            raise e, None, traceback
+
+        self._reg_msg = message
+
+    @property
+    def qdesc(self):
+        return self._reg_msg["qdesc"]
+    
+    @property
+    def endpoint(self):
+        return self._conn.endpoint
 
     def setup(self, job_data):
         """ Initializes the worker. 

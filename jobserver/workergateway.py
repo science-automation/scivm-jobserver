@@ -46,7 +46,7 @@ class WorkerConnection(object):
         self._address = address
     
     @property
-    def address(self):
+    def endpoint(self):
         return "{0}:{1}".format(self._address[0], self._address[1])
 
     def send(self, data):
