@@ -9,10 +9,34 @@ import pickle
 
 import logging
 
+logger = logging.getLogger()
+
+class Queues(object):
+    
+    def __init__(self):
+        self._loop_coro = None
+        self.cli = redis.StrictRedis(host="localhost", port=6379, db=0)
+
+    def start(self):
+        self._loop_coro = gevent.spawn(self.loop)
+
+    def stop(self):
+        if self.loop_coro:
+            self._loop_coro.kill()
+    
+    def loop(self):
+        while True:
+            queue, payload = self.cli.brpop("noq.jobs.queued")
+            data = pickle.loads(zlib.decompress(payload))
+            logger.info("get queued job {0}".format(data["pk"],))
+            qname = "noq.jobs.queued.{0}".format(data["apikey_id"])
+            self.cli.lpush(qname, payload)
+            logger.info("get queued job {0} to {1}".format(data["pk"], qname))
+        
 
 class QueueHandler(object):
     
-    def __init__(self):
+    def __init__(self, qdesc):
         self.connected = gevent.event.Event()
         self.connected.clear()
         
@@ -24,6 +48,12 @@ class QueueHandler(object):
         self.fetcher_coro = None
         self.pusher_coro = None
         self.abandoned_coro = None
+
+        self._qdesc = qdesc
+    
+    @property
+    def qname(self):
+        return self._qdesc
 
     def _get_client(self):
         while True:
@@ -52,7 +82,7 @@ class QueueHandler(object):
         while True:
             try:
                 self.connected.wait()
-                queue, payload = self.cli.blpop("noq.jobs.queued")
+                queue, payload = self.cli.blpop(self.qname)
                 return payload
             except redis.exceptions.RedisError, e:
                 print "redis is unavailable"
@@ -62,7 +92,7 @@ class QueueHandler(object):
         while True:
             try:
                 self.connected.wait()
-                self.cli.lpush("noq.jobs.finished", data)
+                self.cli.lpush("noq.jobs.updates", data)
                 #print "pushed"
                 return
             except redis.exceptions.RedisError, e:

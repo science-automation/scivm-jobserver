@@ -14,10 +14,13 @@ import zlib
 
 import zerorpc
 
+import logging
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
 
 from workergateway import WorkerConnection, WorkerGateway
 from worker import WorkerInterface
-from qh import QueueHandler
+from qh import QueueHandler, Queues
 
 
 class Worker(object):
@@ -39,6 +42,7 @@ class Worker(object):
 
     def do(self):
         worker = WorkerInterface(self.conn)
+        print worker.qdesc
         c = 0
         while True:
             print 'worker {0} waiting for job'.format(self.id)
@@ -51,6 +55,7 @@ class Worker(object):
                 updates = worker.assign(job_data)
                 for update in updates:
                     print update
+                    self.q.push(update)
             except IOError, e:
                 self.q.to_abandoned(job_data) #FIXME restartable?
                 self.jm.deregister_worker(self)
@@ -64,18 +69,14 @@ class Worker(object):
             if 'exception' in update:
                 print 'worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"])
             
-            update["finished_at"] = time.time()
-            update["pk"] = job_data["pk"]
-            update["group_id"] = job_data["group_id"]
-            update.pop("type")
-            self.q.push(update)
+            #self.q.push(update)
             c += 1
 
 
 class JobServer(object):
 
     def __init__(self):
-        self.q = QueueHandler()
+        self.q = QueueHandler("noq.jobs.queued.4")
         self.q.start()
         
         self.workers = {}
@@ -116,6 +117,9 @@ if __name__ == '__main__':
         print "error: please set GATEWAY and ENDPOINT environment variables"
         sys.exit(1)
     
+    qs = Queues()
+    qs.start()
+    
     jserver = JobServer()
     jserver.start()
     
@@ -137,3 +141,4 @@ if __name__ == '__main__':
         print "shuting down..."
         worker_gateway.stop()
         jserver.stop()
+        qs.stop()
