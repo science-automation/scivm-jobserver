@@ -2,7 +2,15 @@ import gevent
 import gevent.socket as socket
 import gevent.server
 
+import time
+
 import json
+import logging
+
+logger = logging.getLogger()
+
+class WorkerGone(Exception):
+    pass
 
 
 class WorkerGateway(object):
@@ -30,6 +38,7 @@ class WorkerGateway(object):
         self._conn_handler(conn)
 
     def start(self):
+        logger.debug("waiting for workers")
         self._server_coro = gevent.spawn(self._server.serve_forever)
 
     def stop(self, timeout=None):
@@ -44,19 +53,24 @@ class WorkerConnection(object):
     def __init__(self, socket, address):
         self._socket = socket
         self._address = address
-    
+
     @property
     def endpoint(self):
         return "{0}:{1}".format(self._address[0], self._address[1])
 
     def send(self, data):
-        self._socket.sendall(data)
+        try:
+            self._socket.sendall(data)
+        except:
+            raise WorkerGone("connection closed for {0}".format(self.endpoint))
 
     def recv(self, count):
         received = ""
         need = count
         while need > 0:
             chunk = self._socket.recv(need)
+            if chunk == "":
+                raise WorkerGone("connection closed for {0}".format(self.endpoint))
             need -= len(chunk)
             received += chunk
         return received
@@ -68,7 +82,8 @@ class WorkerConnection(object):
         
     def recv_json(self, chunk_size=1024):
         raw = self.recv(chunk_size).rstrip()
-        return json.loads(raw)
-    
+        message = json.loads(raw)
+        return message
+
     def close(self):
         self._socket.close()

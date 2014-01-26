@@ -32,7 +32,7 @@ class Queues(object):
             qname = "noq.jobs.queued.{0}".format(data["apikey_id"])
             self.cli.lpush(qname, payload)
             logger.info("get queued job {0} to {1}".format(data["pk"], qname))
-        
+             
 
 class QueueHandler(object):
     
@@ -82,6 +82,7 @@ class QueueHandler(object):
         while True:
             try:
                 self.connected.wait()
+                print "waiting for", self.qname
                 queue, payload = self.cli.blpop(self.qname)
                 return payload
             except redis.exceptions.RedisError, e:

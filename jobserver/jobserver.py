@@ -1,8 +1,10 @@
-from gevent.server import StreamServer
-from gevent import socket, spawn, monkey
-from gevent.queue import Queue
 import gevent
-monkey.patch_all()
+import gevent.monkey
+gevent.monkey.patch_all()
+
+from gevent.server import StreamServer
+from gevent import socket, spawn
+from gevent.queue import Queue
 
 import os
 import random
@@ -18,19 +20,23 @@ import logging
 logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
 
-from workergateway import WorkerConnection, WorkerGateway
+from workergateway import WorkerConnection, WorkerGateway, WorkerGone
 from worker import WorkerInterface
-from qh import QueueHandler, Queues
-
+#from qh import QueueHandler, Queues
+from qmanager import JobQueueManager
 
 class Worker(object):
     
-    def __init__(self, jm, id, conn):
+    def __init__(self, id, qm, conn):
         self.id = id
         self.conn = conn
-        self.jm = jm
-        self.q = jm.q
+        self._worker = WorkerInterface(self.conn)
+        self.qm = qm
         self.coro = None
+    
+    @property
+    def qdesc(self):
+        return self._worker.qdesc
 
     def spawn(self):
         self.coro = gevent.spawn(self.do)
@@ -41,8 +47,9 @@ class Worker(object):
         self.coro.kill()
 
     def do(self):
-        worker = WorkerInterface(self.conn)
+        worker = self._worker 
         print worker.qdesc
+        self.q = self.qm.register_worker(self)
         c = 0
         while True:
             print 'worker {0} waiting for job'.format(self.id)
@@ -56,9 +63,9 @@ class Worker(object):
                 for update in updates:
                     print update
                     self.q.push(update)
-            except IOError, e:
-                self.q.to_abandoned(job_data) #FIXME restartable?
-                self.jm.deregister_worker(self)
+            except (WorkerGone, IOError), e:
+                self.q.abandon(job_data) #FIXME restartable?
+                self.qm.deregister_worker(self)
                 self.kill()
                 return 
             #except Exception, e:
@@ -75,11 +82,8 @@ class Worker(object):
 
 class JobServer(object):
 
-    def __init__(self):
-        self.q = QueueHandler("noq.jobs.queued.4")
-        self.q.start()
-        
-        self.workers = {}
+    def __init__(self, qm):
+        self.qm = qm
         self._next_worker_id = 0
 
     @property
@@ -90,23 +94,15 @@ class JobServer(object):
             self._next_worker_id += 1    
 
     def add_worker_connection(self, conn):
-        worker = Worker(self, self.next_worker_id, conn)
-        self.workers[worker.id] = worker
+        worker = Worker( self.next_worker_id, self.qm, conn)
         print "new worker {0}".format(worker.id)
         worker.spawn()
     
-    def deregister_worker(self, worker):
-        print "worker {0} went away".format(worker.id)
-        del self.workers[worker.id]
-
     def start(self):
         pass
 
     def stop(self):
-        for worker in self.workers.itervalues():
-            worker.kill()
-        self.q.kill()
-
+        pass
 
 
 if __name__ == '__main__':
@@ -117,10 +113,10 @@ if __name__ == '__main__':
         print "error: please set GATEWAY and ENDPOINT environment variables"
         sys.exit(1)
     
-    qs = Queues()
-    qs.start()
-    
-    jserver = JobServer()
+    qm = JobQueueManager()
+    qm.start()
+
+    jserver = JobServer(qm)
     jserver.start()
     
     worker_gateway = WorkerGateway(GATEWAY, jserver.add_worker_connection)
@@ -141,4 +137,4 @@ if __name__ == '__main__':
         print "shuting down..."
         worker_gateway.stop()
         jserver.stop()
-        qs.stop()
+        qm.stop()

@@ -1,12 +1,22 @@
-import sys
+import gevent
 
+import sys
+import time
+import logging
+from workergateway import WorkerGone
+
+logger = logging.getLogger()
 
 class WorkerInterface(object):
     
     def __init__(self, conn):
         self._conn = conn
         self._ap_version = None
-
+        self._last_recv_at = self._last_sent_at = time.time()
+        self._rq = gevent.queue.Queue()
+        self._sq = gevent.queue.Queue()
+        self._hb_freq = 5
+        self.start()
         try:
             message, _ = self._recv_msg()
             # first incoming message must be an registration message with qdesc
@@ -14,9 +24,8 @@ class WorkerInterface(object):
             assert "qdesc" in message
         except Exception, e:
             (_, _, traceback) = sys.exc_info()
-            self._conn.close()
+            self.stop()
             raise e, None, traceback
-
         self._reg_msg = message
 
     @property
@@ -87,8 +96,10 @@ class WorkerInterface(object):
             "fast_serialization": job_data["fast_serialization"],
         }
         self._send_msg(data, payload)
+        #self._send_msg({"type": "die"}, None)
         
         while True:
+            print "WAITING"
             message, payload = self._recv_msg()
             assert message["type"] in ('finished', 'processing', 'profile')
 
@@ -121,20 +132,58 @@ class WorkerInterface(object):
         self._send_msg({"type": "die"})
 
     def _recv_msg(self):
-        data = self._conn.recv_json()
-        if "payload_length" in data:
-            payload = self._conn.recv(data["payload_length"])
-            data.pop("payload_length")
-        else:
-            payload = None
+        msg = self._rq.get()
+        if isinstance(msg, BaseException):
+            raise msg
+        return msg
 
-        return (data, payload)
-    
     def _send_msg(self, data, payload=None):
         if "payload_length" in data:
             assert payload is not None
+        self._sq.put((data, payload))        
+
+    def __sender(self):
+        while True:
+            try:
+                try:
+                    data, payload = self._sq.get(timeout=self._hb_freq)
+                    self._conn.send_json(data)
+                    if "payload_length" in data:
+                        print self._conn.send(payload)
+                except gevent.queue.Empty:
+                    print "sending hb"
+                    print self._conn.send_json({"type": "hb"})
+            except BaseException, e:
+                self._rq.put_nowait(e)
+                break
+        print "quiting"
+
+    def __receiver(self):
+        while True:
+            try:
+                print "waiiting for message"
+                data = self._conn.recv_json()
+                if "payload_length" in data:
+                    payload = self._conn.recv(data["payload_length"])
+                    data.pop("payload_length")
+                else:
+                    payload = None
+                self._last_recv_at = time.time()
+                if data["type"] == "hb":
+                    logger.debug("hb received from {0}".format(self.endpoint))
+                    continue
+                self._rq.put_nowait((data, payload))
+            except BaseException, e:
+                self._rq.put_nowait(e)
+                break
+        print "quiting"
+
+    def start(self):
+        self._sender_coro = gevent.spawn(self.__sender)
+        self._receiver_coro = gevent.spawn(self.__receiver)
+
+    def stop(self):
+        self._conn.close()
+        self._sender_coro.kill()
+        self._receiver_coro.kill()
         
-        self._conn.send_json(data)
-        if "payload_length" in data:
-            self._conn.send(payload)
-        return 
