@@ -65,9 +65,9 @@ class JobQueueManager(object):
         
         if self._updater_coro:
             gevent.kill(self._updater_coro)
-
-        #or q in self._queues.values():
-        #   q.kill()
+        
+        for qname in self._queues.keys():
+            self.remove_queue(qname)
 
     def start(self):
         self._loop_coro = gevent.spawn(self.loop)
@@ -188,11 +188,9 @@ class JobQueue(object):
         self._loop_coro = gevent.spawn(self.loop)
     
     def stop(self):
-        print "eps"
         self._stopped = True
         if self._loop_coro:
             gevent.kill(self._loop_coro)
-        print "ops"
         del self._zcli
 
     def __str__(self):
@@ -225,8 +223,7 @@ class JobQueue(object):
                     self._qm.remove_queue(self._qname)
                     break
         except gevent.GreenletExit:
-            print "huuu"
-        print "quiting"
+            pass
 
     def _start_worker(self, count):
         logger.debug("asking for {0} workers for {1}".format(count, self._qname))
