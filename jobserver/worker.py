@@ -16,6 +16,7 @@ class WorkerInterface(object):
         self._rq = gevent.queue.Queue()
         self._sq = gevent.queue.Queue()
         self._hb_freq = 5
+        self._pending_hb = 0
         self.start()
         try:
             message, _ = self._recv_msg()
@@ -36,7 +37,7 @@ class WorkerInterface(object):
     def endpoint(self):
         return self._conn.endpoint
 
-    def setup(self, job_data):
+    def setup(self, setup_data):
         """ Initializes the worker. 
             
             Should be sent as the first command and only once 
@@ -45,7 +46,7 @@ class WorkerInterface(object):
         assert self._ap_version is None
         
         data = {
-            "ap_version": "", #FIXME job_data["ap_version"],
+            "ap_version": "", #FIXME setup_data["ap_version"],
             "ap_path": "", #FIXME
             "archive_path": "",#FIXME
             "hostname": "", # hostname to harcode in worker (hostname is part of all cloud api request)
@@ -99,7 +100,6 @@ class WorkerInterface(object):
         #self._send_msg({"type": "die"}, None)
         
         while True:
-            print "WAITING"
             message, payload = self._recv_msg()
             assert message["type"] in ('finished', 'processing', 'profile')
 
@@ -149,19 +149,20 @@ class WorkerInterface(object):
                     data, payload = self._sq.get(timeout=self._hb_freq)
                     self._conn.send_json(data)
                     if "payload_length" in data:
-                        print self._conn.send(payload)
+                        self._conn.send(payload)
                 except gevent.queue.Empty:
-                    print "sending hb"
-                    print self._conn.send_json({"type": "hb"})
+                    self._pending_hb += 1
+                    if self._pending_hb > 2:
+                        logger.debug("pending hbs for {0}: {1}".format(self.endpoint, self._pending_hb))
+                    self._conn.send_json({"type": "hb"})
             except BaseException, e:
                 self._rq.put_nowait(e)
                 break
-        print "quiting"
+        #print "quiting sender of {0}".format(self.endpoint)
 
     def __receiver(self):
         while True:
             try:
-                print "waiiting for message"
                 data = self._conn.recv_json()
                 if "payload_length" in data:
                     payload = self._conn.recv(data["payload_length"])
@@ -170,20 +171,22 @@ class WorkerInterface(object):
                     payload = None
                 self._last_recv_at = time.time()
                 if data["type"] == "hb":
-                    logger.debug("hb received from {0}".format(self.endpoint))
+                    self._pending_hb = 0
+                    #logger.debug("hb received from {0}".format(self.endpoint))
                     continue
                 self._rq.put_nowait((data, payload))
             except BaseException, e:
                 self._rq.put_nowait(e)
                 break
-        print "quiting"
+        #print "quiting receiver of {0}".format(self.endpoint)
 
     def start(self):
         self._sender_coro = gevent.spawn(self.__sender)
         self._receiver_coro = gevent.spawn(self.__receiver)
 
     def stop(self):
+        logger.debug("stopping worker {0}".format(self.endpoint))
         self._conn.close()
-        self._sender_coro.kill()
-        self._receiver_coro.kill()
+        gevent.kill(self._sender_coro)
+        gevent.kill(self._receiver_coro)
         

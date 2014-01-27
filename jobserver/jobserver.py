@@ -17,20 +17,23 @@ import zlib
 import zerorpc
 
 import logging
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
+logging.basicConfig(format="%(levelname)s %(message)s")
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 
 from workergateway import WorkerConnection, WorkerGateway, WorkerGone
 from worker import WorkerInterface
 #from qh import QueueHandler, Queues
 from qmanager import JobQueueManager
 
+
 class Worker(object):
     
     def __init__(self, id, qm, conn):
         self.id = id
-        self.conn = conn
-        self._worker = WorkerInterface(self.conn)
+        self._conn = conn
+        self._worker = WorkerInterface(self._conn)
         self.qm = qm
         self.coro = None
     
@@ -42,43 +45,40 @@ class Worker(object):
         self.coro = gevent.spawn(self.do)
         return self.coro
 
-    def kill(self):
-        print "killing worker {0}".format(self.id)
-        self.coro.kill()
+    def stop(self):
+        logger.debug("stopping worker {0}".format(self.id))
+        self._worker.stop()
 
     def do(self):
         worker = self._worker 
-        print worker.qdesc
         self.q = self.qm.register_worker(self)
-        c = 0
+        if not self.q:
+            return
+        worker.setup({}) 
         while True:
-            print 'worker {0} waiting for job'.format(self.id)
-            job_data = self.q.pop()
+            logger.debug('worker {0} waiting for job'.format(self.id))
+            job_data = self.q.take()
+            if job_data is None:
+                self.qm.deregister_worker(self)
+                return 
             self.cur_job = job_data
-            print 'worker {0} got job {1}'.format(self.id, job_data["pk"])
+            logger.debug('worker {0} got job {1}'.format(self.id, job_data["pk"]))
             try:
-                if c == 0:
-                    worker.setup(job_data) 
                 updates = worker.assign(job_data)
                 for update in updates:
-                    print update
-                    self.q.push(update)
+                    self.q.update(update)
             except (WorkerGone, IOError), e:
                 self.q.abandon(job_data) #FIXME restartable?
                 self.qm.deregister_worker(self)
-                self.kill()
                 return 
             #except Exception, e:
             #    print e
             #    update = {"runtime": 0.0, "exception": "system error? {0}".format(str(e))} 
-            print 'worker {0} got result of job {1}'.format(self.id, job_data["pk"])
+            logger.debug('worker {0} got result of job {1}'.format(self.id, job_data["pk"]))
             
             if 'exception' in update:
-                print 'worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"])
+                logger.debug('worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"]))
             
-            #self.q.push(update)
-            c += 1
-
 
 class JobServer(object):
 
@@ -95,7 +95,7 @@ class JobServer(object):
 
     def add_worker_connection(self, conn):
         worker = Worker( self.next_worker_id, self.qm, conn)
-        print "new worker {0}".format(worker.id)
+        logger.debug("new worker {0}".format(worker.id))
         worker.spawn()
     
     def start(self):

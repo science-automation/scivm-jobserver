@@ -43,7 +43,7 @@ class WorkerGateway(object):
 
     def stop(self, timeout=None):
         if self._server_coro:
-            self._server_coro.kill(timeout=timeout)
+            gevent.kill(self._server_coro)
         self._socket.close()
 
 
