@@ -7,7 +7,8 @@ import rediscli
 import os
 
 
-logger = logging.getLogger()
+logger = logging.getLogger("queue")
+slogger = logging.getLogger("queue.status")
 
 _rcli = None
 def get_rcli():
@@ -38,64 +39,6 @@ class Component(object):
         for c in self._coros:
             gevent.kill(c)
         del self._coros
-
-
-class WaitingJobQueueManager(Component):
-    
-    def __init__(self):
-        super(JobQueueManager, self).__init__()
-        self._rcli = get_rcli()
-    
-    def start(self):
-        self._coros.append(gevent.spawn(self._incoming_fetcher))
-    
-    def _incoming_fetcher(self):
-        logger.debug("waiting for incoming jobs")
-        while True:
-            if self.stopped.is_set():
-                break
-
-            resp = self._rcli.brpop("noq.jobs.incoming", timeout=3)
-            if resp is None:
-                continue
-            
-            _, payload = resp
-            data = pickle.loads(zlib.decompress(payload))
-             
-            self._rcli.lpush("noq.jobs.queued")
-    
-
-class WaintingJobQueue(Component):
-    
-    def __init__(self, qm, qname):
-        super(WaitingJobQueue, self).__init__()
-
-        self._qname = qname
-        self._qm = qm
-        self._q = gevent.queue.Queue()
-        self._queued = set()
-        
-        self._rcli = get_rcli()
-    
-    @classmethod
-    def load_from_redis(cls, qdesc):
-        raise NotImplementedError
-    
-    def queue(self, job_desc):
-        pk = job_desc["pk"]
-        logger.debug("queuing job {0} in {1}".format(pk, self._qname))
-        self._queued.add(job_desc["pk"])
-        self._q.put_nowait(job_desc)
-
-    def start(self):
-        self._coros = [ gevent.spawn(self._watcher), ]
-    
-    def stop(self, timeout=None):
-        super(JobQueue, self).stop(timeout)
-    
-    def __str__(self):
-        return "{0}".format(self._qname).ljust(50) + "q:{0}".format(len(self._queued),)
-
 
 
 class JobQueueManager(Component):
@@ -201,10 +144,10 @@ class JobQueueManager(Component):
             if self._stopped.is_set():
                 break
             
-            logger.info("\n-------------------------------")
-            logger.info("QUEUES:")
+            slogger.info("-------------------------------")
+            slogger.info("QUEUES:")
             for q in self._queues.itervalues():
-                logger.info(q)
+                slogger.info(q)
             gevent.sleep(3)
 
 
@@ -333,4 +276,60 @@ class ScalerClient(object):
             self._zcli.start_worker(self._gateway, qname, count, timeout=5)
         except:
             logger.debug("error asking")
+"""
+class WaitingJobQueueManager(Component):
+    
+    def __init__(self):
+        super(JobQueueManager, self).__init__()
+        self._rcli = get_rcli()
+    
+    def start(self):
+        self._coros.append(gevent.spawn(self._incoming_fetcher))
+    
+    def _incoming_fetcher(self):
+        logger.debug("waiting for incoming jobs")
+        while True:
+            if self.stopped.is_set():
+                break
 
+            resp = self._rcli.brpop("noq.jobs.incoming", timeout=3)
+            if resp is None:
+                continue
+            
+            _, payload = resp
+            data = pickle.loads(zlib.decompress(payload))
+             
+            self._rcli.lpush("noq.jobs.queued")
+    
+
+class WaintingJobQueue(Component):
+    
+    def __init__(self, qm, qname):
+        super(WaitingJobQueue, self).__init__()
+
+        self._qname = qname
+        self._qm = qm
+        self._q = gevent.queue.Queue()
+        self._queued = set()
+        
+        self._rcli = get_rcli()
+    
+    @classmethod
+    def load_from_redis(cls, qdesc):
+        raise NotImplementedError
+    
+    def queue(self, job_desc):
+        pk = job_desc["pk"]
+        logger.debug("queuing job {0} in {1}".format(pk, self._qname))
+        self._queued.add(job_desc["pk"])
+        self._q.put_nowait(job_desc)
+
+    def start(self):
+        self._coros = [ gevent.spawn(self._watcher), ]
+    
+    def stop(self, timeout=None):
+        super(JobQueue, self).stop(timeout)
+    
+    def __str__(self):
+        return "{0}".format(self._qname).ljust(50) + "q:{0}".format(len(self._queued),)
+"""

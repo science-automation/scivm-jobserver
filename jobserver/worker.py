@@ -5,7 +5,9 @@ import time
 import logging
 from workergateway import WorkerGone
 
-logger = logging.getLogger()
+
+logger = logging.getLogger("worker")
+
 
 class WorkerInterface(object):
     
@@ -194,3 +196,54 @@ class WorkerInterface(object):
         gevent.kill(self._sender_coro)
         gevent.kill(self._receiver_coro)
         
+
+class Worker(object):
+    
+    def __init__(self, id, qm, conn):
+        self.id = id
+        self._conn = conn
+        self._worker = WorkerInterface(self._conn)
+        self.qm = qm
+        self.coro = None
+    
+    @property
+    def qdesc(self):
+        return self._worker.qdesc
+
+    def spawn(self):
+        self.coro = gevent.spawn(self.do)
+        return self.coro
+
+    def stop(self):
+        logger.debug("stopping worker {0}".format(self.id))
+        self._worker.stop()
+
+    def do(self):
+        worker = self._worker 
+        self.q = self.qm.register_worker(self)
+        if not self.q:
+            return
+        worker.setup({}) 
+        while True:
+            logger.debug('worker {0} waiting for job'.format(self.id))
+            job_data = self.q.take()
+            if job_data is None:
+                self.qm.deregister_worker(self)
+                return 
+            self.cur_job = job_data
+            logger.debug('worker {0} got job {1}'.format(self.id, job_data["pk"]))
+            try:
+                updates = worker.assign(job_data)
+                for update in updates:
+                    self.q.update(update)
+            except (WorkerGone, IOError), e:
+                self.q.abandon(job_data) #FIXME restartable?
+                self.qm.deregister_worker(self)
+                return 
+            #except Exception, e:
+            #    print e
+            #    update = {"runtime": 0.0, "exception": "system error? {0}".format(str(e))} 
+            logger.debug('worker {0} got result of job {1}'.format(self.id, job_data["pk"]))
+            
+            if 'exception' in update:
+                logger.debug('worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"]))

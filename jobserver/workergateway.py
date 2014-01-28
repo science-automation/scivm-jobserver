@@ -7,7 +7,8 @@ import time
 import json
 import logging
 
-logger = logging.getLogger()
+logger = logging.getLogger("worker")
+
 
 class WorkerGone(Exception):
     pass

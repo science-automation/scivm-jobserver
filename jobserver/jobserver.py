@@ -10,68 +10,15 @@ import sys
 import zerorpc
 
 import logging
-logging.basicConfig(format="%(levelname)s %(message)s")
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
-from workergateway import WorkerConnection, WorkerGateway, WorkerGone
-from worker import WorkerInterface
+from workergateway import WorkerGateway
+from worker import Worker
 from qmanager import JobQueueManager, ScalerClient
-
-
-class Worker(object):
-    
-    def __init__(self, id, qm, conn):
-        self.id = id
-        self._conn = conn
-        self._worker = WorkerInterface(self._conn)
-        self.qm = qm
-        self.coro = None
-    
-    @property
-    def qdesc(self):
-        return self._worker.qdesc
-
-    def spawn(self):
-        self.coro = gevent.spawn(self.do)
-        return self.coro
-
-    def stop(self):
-        logger.debug("stopping worker {0}".format(self.id))
-        self._worker.stop()
-
-    def do(self):
-        worker = self._worker 
-        self.q = self.qm.register_worker(self)
-        if not self.q:
-            return
-        worker.setup({}) 
-        while True:
-            logger.debug('worker {0} waiting for job'.format(self.id))
-            job_data = self.q.take()
-            if job_data is None:
-                self.qm.deregister_worker(self)
-                return 
-            self.cur_job = job_data
-            logger.debug('worker {0} got job {1}'.format(self.id, job_data["pk"]))
-            try:
-                updates = worker.assign(job_data)
-                for update in updates:
-                    self.q.update(update)
-            except (WorkerGone, IOError), e:
-                self.q.abandon(job_data) #FIXME restartable?
-                self.qm.deregister_worker(self)
-                return 
-            #except Exception, e:
-            #    print e
-            #    update = {"runtime": 0.0, "exception": "system error? {0}".format(str(e))} 
-            logger.debug('worker {0} got result of job {1}'.format(self.id, job_data["pk"]))
-            
-            if 'exception' in update:
-                logger.debug('worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"]))
-            
-
+from logstream import Service
 
 if __name__ == '__main__':
     try:
@@ -95,11 +42,6 @@ if __name__ == '__main__':
 
     qm.start()
 
-    class Service():
-        
-        def ping(self):
-            return "pong"
-        
     server = zerorpc.Server(Service())
     server.bind(ENDPOINT)
     try:
