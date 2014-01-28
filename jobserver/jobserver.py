@@ -2,17 +2,10 @@ import gevent
 import gevent.monkey
 gevent.monkey.patch_all()
 
-from gevent.server import StreamServer
-from gevent import socket, spawn
 from gevent.queue import Queue
 
 import os
-import random
 import sys
-import time
-import pickle
-import redis
-import zlib
 
 import zerorpc
 
@@ -24,8 +17,7 @@ logger.setLevel(logging.INFO)
 
 from workergateway import WorkerConnection, WorkerGateway, WorkerGone
 from worker import WorkerInterface
-#from qh import QueueHandler, Queues
-from qmanager import JobQueueManager
+from qmanager import JobQueueManager, ScalerClient
 
 
 class Worker(object):
@@ -80,47 +72,28 @@ class Worker(object):
                 logger.debug('worker {0} got exception for job {1}: {2}'.format(self.id, job_data["pk"], update["exception"]))
             
 
-class JobServer(object):
-
-    def __init__(self, qm):
-        self.qm = qm
-        self._next_worker_id = 0
-
-    @property
-    def next_worker_id(self):
-        try:
-            return self._next_worker_id
-        finally:
-            self._next_worker_id += 1    
-
-    def add_worker_connection(self, conn):
-        worker = Worker( self.next_worker_id, self.qm, conn)
-        logger.debug("new worker {0}".format(worker.id))
-        worker.spawn()
-    
-    def start(self):
-        pass
-
-    def stop(self):
-        pass
-
 
 if __name__ == '__main__':
     try:
+        REDIS_HOST = os.environ["REDIS_HOST"]
+        REDIS_PORT = int(os.environ["REDIS_PORT"])
+        REDIS_DB = int(os.environ["REDIS_DB"])
         GATEWAY = os.environ["GATEWAY"]
         ENDPOINT = os.environ["ENDPOINT"]
+        SCALER_ENDPOINT = os.environ["SCALER_ENDPOINT"]
     except KeyError:
-        print "error: please set GATEWAY and ENDPOINT environment variables"
+        print "error: please set GATEWAY, ENDPOINT, SCALER_ENDPOINT, REDIS_HOST, REDIS_PORT, REDIS_DB environment variables"
         sys.exit(1)
-    
-    qm = JobQueueManager()
-    qm.start()
+    except ValueError:
+        print "error: REDIS_PORT or REDIS_DB is not an integer"
+        
+    scaler_cli = ScalerClient(gateway=GATEWAY, endpoint=SCALER_ENDPOINT)
+    qm = JobQueueManager(scaler_cli=scaler_cli, worker_class=Worker)
 
-    jserver = JobServer(qm)
-    jserver.start()
-    
-    worker_gateway = WorkerGateway(GATEWAY, jserver.add_worker_connection)
+    worker_gateway = WorkerGateway(GATEWAY, qm._add_worker_connection)
     worker_gateway.start()
+
+    qm.start()
 
     class Service():
         
@@ -136,5 +109,4 @@ if __name__ == '__main__':
     finally:
         print "shuting down..."
         worker_gateway.stop()
-        jserver.stop()
         qm.stop()
