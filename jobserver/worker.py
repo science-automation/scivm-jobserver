@@ -22,7 +22,7 @@ class WorkerInterface(object):
             message, _ = self._recv_msg()
             # first incoming message must be an registration message with qdesc
             assert "type" in message and message["type"] == "registration"
-            assert "qdesc" in message
+            assert "qdesc" in message and "wid" in message
         except Exception, e:
             (_, _, traceback) = sys.exc_info()
             self.stop()
@@ -32,6 +32,10 @@ class WorkerInterface(object):
     @property
     def qdesc(self):
         return self._reg_msg["qdesc"]
+    
+    @property
+    def wid(self):
+        return self._reg_msg["wid"]
     
     @property
     def endpoint(self):
