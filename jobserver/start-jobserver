@@ -1,9 +1,11 @@
 #!/bin/bash
 
-# Find the job server ip address and port
+# get REDIS_HOST/PORT/DB and SCALER_ENDPOINT
 (cat /proc/1/environ; echo) | tr '\000' '\n' > /tmp/jinfo.dat
 source /tmp/jinfo.dat
 
+IP_ADDRESS = $(hostname -I)
+
 # start the jobserver
 cd /opt/apps/scivm/jobserver
-SERVER_ADDRESS=0.0.0.0 SERVER_PORT=4444 python jobserver.py
+ENDPOINT=tcp://$IP_ADDRESS:10000 GATEWAY=$IP_ADDRESS:4444 python jobserver.py

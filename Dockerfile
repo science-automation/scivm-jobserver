@@ -46,4 +46,4 @@ RUN (chmod 755 /opt/apps/scivm/.docker/run.sh)
 workdir /opt/apps/scivm
 entrypoint ["/opt/apps/scivm/.docker/run.sh"]
 
-EXPOSE 22 8080
+EXPOSE 22 8080 10000 4444
