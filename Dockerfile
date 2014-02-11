@@ -7,7 +7,7 @@ RUN echo "deb ftp://mirror.hetzner.de/ubuntu/packages precise main restricted un
 RUN locale-gen en_US en_US.UTF-8
 
 # Utilities
-RUN apt-get install -y python-dev python-setuptools vim-tiny less curl git unzip subversion python-software-properties make gcc redis-server
+RUN apt-get install -y python-dev python-setuptools vim-tiny less curl git unzip python-software-properties make gcc redis-server build-essentials
 
 # Supervisord
 RUN apt-get install -y supervisor && mkdir -p /var/log/supervisor
@@ -31,9 +31,6 @@ RUN pip install setuptools --no-use-wheel --upgrade
 # install jobserver requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
-
-# install scaler requirements
-RUN cd /opt/apps/scivm/scaler; pip install -r requirements.txt
 
 # call a run script that will pull the latest worker code 
 # and then start supervisor
