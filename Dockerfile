@@ -20,9 +20,6 @@ RUN mkdir -p /opt/apps/scivm/jobserver
 ADD jobserver /opt/apps/scivm/jobserver
 RUN (chmod 755 /opt/apps/scivm/jobserver/start-jobserver)
 
-# add the scaler
-RUN cd /opt/apps/scivm; git clone https://github.com/science-automation/scivm-scaler
-
 # supervisor
 ADD supervisord.conf /etc/supervisor/supervisord.conf
 
