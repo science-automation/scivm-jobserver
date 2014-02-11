@@ -32,9 +32,6 @@ RUN pip install setuptools --no-use-wheel --upgrade
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-# install scaler requirements
-RUN cd /opt/apps/scivm/scaler; pip install -r requirements.txt
-
 # call a run script that will pull the latest worker code 
 # and then start supervisor
 RUN (mkdir -p /opt/apps/scivm/.docker)
