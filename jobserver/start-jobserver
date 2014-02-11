@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Find the job server ip address and port
+(cat /proc/1/environ; echo) | tr '\000' '\n' > /tmp/jinfo.dat
+source /tmp/jinfo.dat
+
 # start the jobserver
 cd /opt/apps/scivm/jobserver
 SERVER_ADDRESS=0.0.0.0 SERVER_PORT=4444 python jobserver.py
