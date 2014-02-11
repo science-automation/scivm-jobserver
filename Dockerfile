@@ -20,6 +20,9 @@ RUN mkdir -p /opt/apps/scivm/jobserver
 ADD jobserver /opt/apps/scivm/jobserver
 RUN (chmod 755 /opt/apps/scivm/jobserver/start-jobserver)
 
+# add the scaler
+RUN cd /opt/apps/scivm; git clone https://github.com/science-automation/scivm-scaler
+
 # supervisor
 ADD supervisord.conf /etc/supervisor/supervisord.conf
 
@@ -27,8 +30,13 @@ ADD supervisord.conf /etc/supervisor/supervisord.conf
 RUN wget https://raw.github.com/pypa/pip/master/contrib/get-pip.py
 RUN (python get-pip.py; rm -f /get-pip.py)
 RUN pip install setuptools --no-use-wheel --upgrade
+
+# install jobserver requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
+
+# install scaler requirements
+RUN cd /opt/apps/scivm/scaler; pip install -r requirements.txt
 
 # call a run script that will pull the latest worker code 
 # and then start supervisor

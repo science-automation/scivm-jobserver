@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # get REDIS_HOST/PORT/DB and SCALER_ENDPOINT
-(cat /proc/1/environ; echo) | tr '\000' '\n' | grep REDIS > /tmp/jinfo.dat
-(cat /proc/1/environ; echo) | tr '\000' '\n' | grep SCALER >> /tmp/jinfo.dat
+(cat /proc/1/environ; echo) | tr '\000' '\n' > /tmp/jinfo.dat
 source /tmp/jinfo.dat
 
 IP_ADDRESS = $(hostname -I)
