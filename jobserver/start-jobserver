@@ -4,8 +4,9 @@
 (cat /proc/1/environ; echo) | tr '\000' '\n' > /tmp/jinfo.dat
 source /tmp/jinfo.dat
 
-IP_ADDRESS = $(hostname -I)
+IP_ADDRESS=$(echo $(hostname -I) | tr -d ' ')
 
 # start the jobserver
 cd /opt/apps/scivm/jobserver
-ENDPOINT=tcp://$IP_ADDRESS:10000 GATEWAY=$IP_ADDRESS:4444 python jobserver.py
+SCALER_ENDPOINT=$SCALER_ENDPOINT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT REDIS_DB=$REDIS_DB ENDPOINT=tcp://$IP_ADDRESS:10000 GATEWAY=$IP_ADDRESS:4444 python jobserver.py
+
